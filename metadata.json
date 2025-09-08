@@ -1,0 +1,7 @@
+{
+  "name": "PESpresso",
+  "description": "An AI-powered assistant for PES University students, providing information on admissions, placements, events, and campus life, with voice control and an attendance calculator.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
