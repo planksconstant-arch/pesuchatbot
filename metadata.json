@@ -1,6 +1,6 @@
 {
   "name": "PESpresso",
-  "description": "An AI-powered assistant for PES University students, providing information on admissions, placements, events, and campus life, with voice control and an attendance calculator.",
+  "description": "An AI assistant for PES University, trained by YapLap. Features multi-model personalities (like Grok and Claude), an attendance calculator, campus map, and integrated web search.",
   "requestFramePermissions": [
     "microphone"
   ]

@@ -5,4 +5,22 @@ export interface Message {
   sender: 'user' | 'bot';
   isTyping?: boolean;
   suggestions?: string[];
+  sources?: GroundingChunk[]; // For Google Search results
+  contentType?: 'text' | 'video' | 'image';
+  contentUrl?: string;
+  videoLabel?: string;
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  messages: Message[];
+}
+
+// Type for grounding chunks from Google Search
+export interface GroundingChunk {
+  web: {
+    uri: string;
+    title: string;
+  };
 }
