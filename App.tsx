@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { ApiKeyPrompt } from './components/ApiKeyPrompt';
 import { AttendanceCalculator } from './components/AttendanceCalculator';
@@ -7,17 +8,18 @@ import { Sidebar } from './components/Sidebar';
 import { VirtualTourModal } from './components/VirtualTourModal';
 import { getAiInstance, generateChatTitle, isGeminiAvailable } from './services/geminiService';
 import { ChatSession, Message } from './types';
-import { PERSONA_INSTRUCTIONS, PERPLEXITY_INSTRUCTION, MEME_TRIGGERS, N8N_WORKFLOW_INSTRUCTION, N8N_SUMMARIZE_INSTRUCTION, N8N_ALUMNI_SEARCH_INSTRUCTION, N8N_QUESTION_PAPER_INSTRUCTION, PERSONA_DESCRIPTIONS, N8N_BOOK_SEARCH_INSTRUCTION } from './constants';
+import { PERSONA_INSTRUCTIONS, PERPLEXITY_INSTRUCTION, MEME_TRIGGERS, N8N_WORKFLOW_INSTRUCTION, N8N_SUMMARIZE_INSTRUCTION, N8N_ALUMNI_SEARCH_INSTRUCTION, N8N_QUESTION_PAPER_INSTRUCTION, PERSONA_DESCRIPTIONS_EN, PERSONA_DESCRIPTIONS_KN, N8N_BOOK_SEARCH_INSTRUCTION } from './constants';
 import { PesLogo } from './components/PesLogo';
-import { AnimatedText } from './components/AnimatedText';
+import FluctuatingTitle from './components/FluctuatingTitle';
 import { MarkdownRenderer } from './components/MarkdownRenderer';
 import { TypingIndicator } from './components/TypingIndicator';
 import { EmbeddedVideoPlayer } from './components/EmbeddedVideoPlayer';
 import { TimetableModal } from './components/TimetableModal';
 import { IntegrationsModal } from './components/IntegrationsModal';
 import { PlacementDataModal } from './components/PlacementDataModal';
+import { StudyMaterialsModal } from './components/StudyMaterialsModal';
 import { YapLapLogo } from './components/YapLapLogo';
-import { selectBestPersona } from './services/modelRouter';
+import { translations } from './translations';
 
 
 const StaticBackground = () => (
@@ -45,13 +47,8 @@ const PetalFall: React.FC = () => {
     );
 };
 
-const TITLES = [
-    "PESpresso",
-    "ペスプレッソ", // Japanese
-];
-
-
 type SearchProvider = 'off' | 'google' | 'perplexity';
+type Language = 'en' | 'kn';
 
 const App: React.FC = () => {
     const [chatHistory, setChatHistory] = useState<ChatSession[]>([]);
@@ -64,8 +61,8 @@ const App: React.FC = () => {
     const [isListening, setIsListening] = useState(false);
     const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
     const [isLargeFont, setIsLargeFont] = useState(false);
-    const [animatedTitle, setAnimatedTitle] = useState(TITLES[0]);
-    const [titleIndex, setTitleIndex] = useState(0);
+    const [language, setLanguage] = useState<Language>('en');
+    const [canSendMessage, setCanSendMessage] = useState(true); // For rate limit cooldown
 
     const [modalsOpen, setModalsOpen] = useState({
         virtualTour: false,
@@ -75,6 +72,7 @@ const App: React.FC = () => {
         timetable: false,
         integrations: false,
         placementData: false,
+        studyMaterials: false,
     });
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -82,18 +80,48 @@ const App: React.FC = () => {
 
     const activeChat = chatHistory.find(c => c.id === activeChatId);
     const messages = activeChat ? activeChat.messages : [];
+    
+    const t = translations[language];
+    const personaDescriptions = language === 'kn' ? PERSONA_DESCRIPTIONS_KN : PERSONA_DESCRIPTIONS_EN;
 
-    useEffect(() => {
-        const titleInterval = setInterval(() => {
-            setTitleIndex(prevIndex => (prevIndex + 1) % TITLES.length);
-        }, 4000); // Change every 4 seconds
+    const getApiErrorMessage = (error: any): string => {
+        console.error("API Error details:", error);
+    
+        let parsedError = error;
+        // Attempt to parse if it's a string that looks like JSON
+        if (typeof error === 'string' && error.trim().startsWith('{')) {
+            try {
+                parsedError = JSON.parse(error);
+            } catch (e) { /* Not valid JSON, proceed with original string */ }
+        } else if (error instanceof Error) {
+            // It's a standard Error object
+            parsedError = { message: error.message, ...error };
+        }
+        
+        const message = parsedError?.message || '';
+        const errorBody = parsedError?.error || parsedError; // Sometimes the whole object is the error body
+        const code = errorBody?.code;
+        const status = errorBody?.status;
+        const bodyMessage = errorBody?.message || '';
 
-        return () => clearInterval(titleInterval);
-    }, []);
+        if (code === 429 || status === 'RESOURCE_EXHAUSTED' || message.includes('quota') || bodyMessage.includes('quota')) {
+            return t.errorRateLimit;
+        }
+        
+        if (message.includes('prompt was blocked') || bodyMessage.includes('prompt was blocked')) {
+            return t.errorPromptBlocked;
+        }
 
-    useEffect(() => {
-        setAnimatedTitle(TITLES[titleIndex]);
-    }, [titleIndex]);
+        if (bodyMessage) {
+             return `${t.errorApi}: ${bodyMessage}`;
+        }
+    
+        if (message) {
+            return `${t.errorGeneric}: ${message.split('\n')[0]}`;
+        }
+    
+        return t.errorOops;
+    };
 
     useEffect(() => {
         try {
@@ -113,12 +141,14 @@ const App: React.FC = () => {
             }
             
             const storedFontSize = localStorage.getItem('pes-yaplap-font-size');
-            if (storedFontSize === 'large') {
-                setIsLargeFont(true);
-            }
+            if (storedFontSize === 'large') setIsLargeFont(true);
+            
+            const storedLanguage = localStorage.getItem('pes-yaplap-language');
+            if (storedLanguage === 'kn') setLanguage('kn');
+
 
         } catch (error) {
-            console.error("Failed to load chat history:", error);
+            console.error("Failed to load settings:", error);
             handleNewChat();
         } finally {
             setIsHistoryLoading(false);
@@ -136,6 +166,11 @@ const App: React.FC = () => {
     useEffect(() => {
         localStorage.setItem('pes-yaplap-font-size', isLargeFont ? 'large' : 'normal');
     }, [isLargeFont]);
+
+    useEffect(() => {
+        localStorage.setItem('pes-yaplap-language', language);
+    }, [language]);
+
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -156,11 +191,8 @@ const App: React.FC = () => {
 
                 if (firstUserPrompt) {
                     const generateAndSetTitle = async () => {
-                        // Double-check inside async function to prevent race conditions
                         const latestChat = chatHistory.find(c => c.id === activeChatId);
-                        if (latestChat?.title !== 'New Chat') {
-                            return;
-                        }
+                        if (latestChat?.title !== 'New Chat') return;
                         
                         const newTitle = await generateChatTitle(firstUserPrompt, chatNeedingTitle.messages);
                         
@@ -180,7 +212,7 @@ const App: React.FC = () => {
             const recognition = new SpeechRecognition();
             recognition.continuous = false;
             recognition.interimResults = false;
-            recognition.lang = 'en-US';
+            recognition.lang = language === 'kn' ? 'kn-IN' : 'en-US';
 
             recognition.onstart = () => setIsListening(true);
             recognition.onend = () => setIsListening(false);
@@ -195,7 +227,7 @@ const App: React.FC = () => {
             };
             speechRecognitionRef.current = recognition;
         }
-    }, []);
+    }, [language]); // Re-initialize if language changes
 
     const handleVoiceInput = () => {
         if (isListening) {
@@ -209,7 +241,7 @@ const App: React.FC = () => {
         navigator.clipboard.writeText(text)
             .then(() => {
                 setCopiedMessageId(messageId);
-                setTimeout(() => setCopiedMessageId(null), 2000); // Reset after 2 seconds
+                setTimeout(() => setCopiedMessageId(null), 2000);
             })
             .catch(err => console.error('Failed to copy text: ', err));
     };
@@ -217,7 +249,8 @@ const App: React.FC = () => {
     const handleN8nWorkflow = async (
         prompt: string, 
         platform: string,
-        instructionTemplate: (queryOrTopic: string) => string
+        instructionTemplate: (queryOrTopic: string) => string,
+        persona: string
     ) => {
         const ai = getAiInstance();
         if (!ai) return;
@@ -225,10 +258,6 @@ const App: React.FC = () => {
         setIsGenerating(true);
         const userMessage: Message = { id: `user-${Date.now()}`, text: prompt, sender: 'user' };
         
-        // Auto-select persona for this workflow
-        const selectedPersona = selectBestPersona(prompt);
-        setModelProvider(selectedPersona);
-
         let currentChatId = activeChatId;
         if (!activeChatId || (activeChat && activeChat.messages.length === 0)) {
             const newChatId = `chat-${Date.now()}`;
@@ -249,12 +278,17 @@ const App: React.FC = () => {
         
         try {
             const workflowPrompt = instructionTemplate(prompt);
+            let systemInstruction = PERSONA_INSTRUCTIONS[persona];
+            if (language === 'kn') {
+                systemInstruction += "\n\nIMPORTANT: You must provide all your responses in the Kannada language (ಕನ್ನಡ).";
+            }
+            
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: [{ role: 'user', parts: [{ text: workflowPrompt }] }],
                 config: {
                     tools: [{ googleSearch: {} }],
-                    systemInstruction: PERSONA_INSTRUCTIONS[selectedPersona]
+                    systemInstruction: systemInstruction
                 }
             });
 
@@ -271,8 +305,7 @@ const App: React.FC = () => {
             const botMessage: Message = { ...botTypingMessage, text: response.text, sources, isTyping: false };
             setChatHistory(prev => prev.map(chat => chat.id === currentChatId ? { ...chat, messages: [...chat.messages.slice(0, -1), botMessage] } : chat));
         } catch (error) {
-             console.error("Error during n8n workflow:", error);
-            const errorText = "Sorry, I couldn't fetch the data. The workflow might be down.";
+            const errorText = getApiErrorMessage(error);
             const errorMessage: Message = { ...botTypingMessage, text: errorText, isTyping: false };
             setChatHistory(prev => prev.map(chat => chat.id === currentChatId ? { ...chat, messages: [...chat.messages.slice(0, -1), errorMessage] } : chat));
         } finally {
@@ -329,8 +362,7 @@ const App: React.FC = () => {
 
             setChatHistory(prev => prev.map(chat => chat.id === currentChatId ? { ...chat, messages: [...chat.messages.slice(0, -1), botImageMessage] } : chat));
         } catch (error) {
-             console.error("Error generating image:", error);
-            const errorText = "Sorry, I couldn't generate that image. The prompt might have been rejected. Please try something else.";
+            const errorText = getApiErrorMessage(error);
             const errorMessage: Message = { ...botTypingMessage, text: errorText, isTyping: false };
             setChatHistory(prev => prev.map(chat => chat.id === currentChatId ? { ...chat, messages: [...chat.messages.slice(0, -1), errorMessage] } : chat));
         } finally {
@@ -341,15 +373,49 @@ const App: React.FC = () => {
     const handleSendMessage = async (prompt?: string) => {
         const messageText = (prompt || userInput).trim();
         const ai = getAiInstance();
-        if (!messageText || isGenerating || !ai) return;
+        if (!messageText || isGenerating || !ai || !canSendMessage) return;
         
-        // Auto-select the best persona for this query
-        const selectedPersona = selectBestPersona(messageText);
-        setModelProvider(selectedPersona);
-
         const lowerCaseMessage = messageText.toLowerCase();
 
+        // Check for persona switching command
+        const switchMatch = lowerCaseMessage.match(/^(?:switch to|use) (\w+)/);
+        const availablePersonas = ['pespresso', 'grok', 'claude', 'chatgpt', 'qwen', 'deepseek'];
+        if (switchMatch) {
+            const targetPersona = switchMatch[1].toLowerCase();
+            if (availablePersonas.includes(targetPersona)) {
+                setModelProvider(targetPersona);
+
+                const userMessage: Message = { id: `user-${Date.now()}`, text: messageText, sender: 'user' };
+                const botMessage: Message = { 
+                    id: `bot-switch-${Date.now()}`, 
+                    text: `Switched to ${targetPersona.charAt(0).toUpperCase() + targetPersona.slice(1)}. How can I help?`, 
+                    sender: 'bot' 
+                };
+
+                let currentChatId = activeChatId;
+                if (!activeChatId || (activeChat && activeChat.messages.length === 0)) {
+                    const newChatId = `chat-${Date.now()}`;
+                    const newChatSession: ChatSession = { id: newChatId, title: 'Persona Switch', messages: [userMessage, botMessage] };
+                    setChatHistory(prev => [newChatSession, ...prev.filter(c => c.messages.length > 0 || c.id !== activeChatId)]);
+                    setActiveChatId(newChatId);
+                } else {
+                    setChatHistory(prev => prev.map(chat =>
+                        chat.id === activeChatId ? { ...chat, messages: [...chat.messages, userMessage, botMessage] } : chat
+                    ));
+                }
+                setUserInput('');
+                return; // Stop further processing
+            }
+        }
+
         // High priority triggers for modals and special workflows
+        const studyTriggers = ['study material', 'notes', 'guides', 'study guide'];
+        if (studyTriggers.some(trigger => lowerCaseMessage.includes(trigger))) {
+            handleModalToggle('studyMaterials', true);
+            setUserInput('');
+            return;
+        }
+
         const placementTriggers = ['placement', 'placements', 'placement data', 'placement stats', '2025 placement', '2026 placement'];
         if (placementTriggers.some(trigger => lowerCaseMessage.includes(trigger))) {
             handleModalToggle('placementData', true);
@@ -360,25 +426,25 @@ const App: React.FC = () => {
         const hostelTriggers = ['hostel review', 'hostel reviews', 'best hostel', 'pes hostel'];
         if (hostelTriggers.some(trigger => lowerCaseMessage.includes(trigger))) {
             setUserInput('');
-            return handleN8nWorkflow(messageText, 'Reddit', (query) => N8N_SUMMARIZE_INSTRUCTION('Reddit', 'PES University Hostels'));
+            return handleN8nWorkflow(messageText, 'Reddit', (query) => N8N_SUMMARIZE_INSTRUCTION('Reddit', 'PES University Hostels'), modelProvider);
         }
         
         const alumniTriggers = ['alumni', 'find alumni', 'search alumni', 'pes alumni on linkedin'];
         if (alumniTriggers.some(trigger => lowerCaseMessage.includes(trigger))) {
             setUserInput('');
-            return handleN8nWorkflow(messageText, 'LinkedIn', N8N_ALUMNI_SEARCH_INSTRUCTION);
+            return handleN8nWorkflow(messageText, 'LinkedIn', N8N_ALUMNI_SEARCH_INSTRUCTION, modelProvider);
         }
 
         const qpTriggers = ['question paper', 'previous year paper', 'pyq', 'exam papers'];
         if (qpTriggers.some(trigger => lowerCaseMessage.includes(trigger))) {
             setUserInput('');
-            return handleN8nWorkflow(messageText, 'Academic Sources', N8N_QUESTION_PAPER_INSTRUCTION);
+            return handleN8nWorkflow(messageText, 'Academic Sources', N8N_QUESTION_PAPER_INSTRUCTION, modelProvider);
         }
 
         const bookTriggers = ['find book', 'search book', 'recommend book', 'textbook for'];
         if (bookTriggers.some(trigger => lowerCaseMessage.includes(trigger))) {
             setUserInput('');
-            return handleN8nWorkflow(messageText, "Digital Libraries", N8N_BOOK_SEARCH_INSTRUCTION);
+            return handleN8nWorkflow(messageText, "Digital Libraries", N8N_BOOK_SEARCH_INSTRUCTION, modelProvider);
         }
 
         // Image Generation Check
@@ -407,9 +473,7 @@ const App: React.FC = () => {
 
         if (n8nPlatform) {
             setUserInput('');
-            // Fix: The instructionTemplate function passed to handleN8nWorkflow should only take one argument (the query).
-            // The platform is captured from the current scope.
-            return handleN8nWorkflow(messageText, n8nPlatform, (query) => N8N_WORKFLOW_INSTRUCTION(n8nPlatform!, query));
+            return handleN8nWorkflow(messageText, n8nPlatform, (query) => N8N_WORKFLOW_INSTRUCTION(n8nPlatform!, query), modelProvider);
         }
 
         // Local meme triggers
@@ -470,9 +534,12 @@ const App: React.FC = () => {
                 parts: [{ text: m.text }]
             })) ?? [];
         
-        let systemInstruction = PERSONA_INSTRUCTIONS[selectedPersona];
+        let systemInstruction = PERSONA_INSTRUCTIONS[modelProvider];
         if (searchProvider === 'perplexity') {
             systemInstruction += `\n\n${PERPLEXITY_INSTRUCTION}`;
+        }
+        if (language === 'kn') {
+            systemInstruction += "\n\nIMPORTANT: You must provide all your responses in the Kannada language (ಕನ್ನಡ).";
         }
 
         try {
@@ -516,12 +583,8 @@ const App: React.FC = () => {
                     }));
                 }
             }
-        } catch (error) {
-            console.error("Error sending message:", error);
-            let errorText = "Oops! Something went wrong. Please try again.";
-            if (error instanceof Error) {
-                errorText = `An API error occurred: ${error.message}`;
-            }
+        } catch (error: any) {
+            const errorText = getApiErrorMessage(error);
             const errorMessage: Message = { id: `bot-error-${Date.now()}`, text: errorText, sender: 'bot' };
             setChatHistory(prev => prev.map(chat => {
                 if (chat.id === currentChatId) {
@@ -532,6 +595,8 @@ const App: React.FC = () => {
             }));
         } finally {
             setIsGenerating(false);
+            setCanSendMessage(false);
+            setTimeout(() => setCanSendMessage(true), 1500); // 1.5-second cooldown
         }
     };
 
@@ -593,8 +658,10 @@ const App: React.FC = () => {
                 onTimetableClick={() => handleModalToggle('timetable', true)}
                 onIntegrationsClick={() => handleModalToggle('integrations', true)}
                 onPlacementDataClick={() => handleModalToggle('placementData', true)}
+                onStudyMaterialsClick={() => handleModalToggle('studyMaterials', true)}
                 onDeleteChat={handleDeleteChat} 
                 isHistoryLoading={isHistoryLoading}
+                t={t}
             />
 
             <main className="flex-1 flex flex-col relative z-10">
@@ -602,7 +669,7 @@ const App: React.FC = () => {
                     {messages.map((msg) => (
                         <div key={msg.id} className={`flex items-start gap-3 group animate-fade-in-up ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                             {msg.sender === 'bot' && <div className="w-8 h-8 rounded-full bg-red-900/80 flex items-center justify-center flex-shrink-0 shadow-lg p-1"><PesLogo /></div>}
-                            <div className={`chat-bubble relative max-w-xl p-3 rounded-xl shadow-lg ${msg.sender === 'user' ? 'bg-red-600/90 text-white' : 'bg-black/40 backdrop-blur-md border border-white/10 text-gray-200'} ${msg.sender === 'bot' && isLargeFont ? 'text-lg' : ''}`}>
+                            <div className={`chat-bubble relative max-w-xl p-3 rounded-xl shadow-lg ${msg.sender === 'user' ? 'bg-red-600/90 text-white' : 'bg-black/40 backdrop-blur-md border border-white/10 text-gray-200'} ${isLargeFont ? 'text-lg' : ''}`}>
                                 {msg.isTyping ? <TypingIndicator /> : (
                                     <>
                                         {msg.text && <MarkdownRenderer content={msg.text} />}
@@ -647,7 +714,7 @@ const App: React.FC = () => {
                     {messages.length === 0 && !isHistoryLoading && (
                         <div className="flex flex-col items-center justify-center h-full text-center p-8">
                             <div className="w-28 h-28 mb-4"><PesLogo /></div>
-                            <h1 className="text-6xl font-bold text-red-600 pespresso-title mb-2"><AnimatedText text={animatedTitle} /></h1>
+                            <FluctuatingTitle />
                             <p className="text-gray-400">Trained by YapLap</p>
                         </div>
                     )}
@@ -709,12 +776,12 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="p-4 md:p-6 bg-transparent">
-                    <div className="max-w-3xl mx-auto">
+                    <div className="max-w-4xl mx-auto">
                         <div className="flex flex-wrap items-start justify-center gap-x-6 gap-y-2 mb-3 px-2">
                            <div className="flex flex-col items-center">
                                 <div className="flex items-center gap-2 h-9">
-                                    <label className="text-sm font-medium text-gray-400">Persona:</label>
-                                    <select value={modelProvider} disabled className="bg-black/40 border border-white/10 text-white text-sm rounded-lg focus:ring-red-500 focus:border-red-500 block p-1.5 backdrop-blur-sm appearance-none disabled:opacity-75" aria-label="Current AI Persona">
+                                    <label className="text-sm font-medium text-gray-400">{t.personaLabel}</label>
+                                    <select value={modelProvider} onChange={(e) => setModelProvider(e.target.value)} className="bg-black/40 border border-white/10 text-white text-sm rounded-lg focus:ring-red-500 focus:border-red-500 block p-1.5 backdrop-blur-sm appearance-none disabled:opacity-75" aria-label="Current AI Persona">
                                         <option value="pespresso">PESpresso</option>
                                         <option value="grok">Grok</option>
                                         <option value="claude">Claude</option>
@@ -724,12 +791,12 @@ const App: React.FC = () => {
                                     </select>
                                 </div>
                                 <p className="text-xs text-gray-500 mt-1 h-8 text-center w-64">
-                                    {isGenerating ? 'Auto-selecting best model...' : PERSONA_DESCRIPTIONS[modelProvider]}
+                                    {personaDescriptions[modelProvider]}
                                 </p>
                             </div>
                             <div className="flex flex-col items-center">
                                 <div className="flex items-center gap-2 h-9">
-                                    <label className="text-sm font-medium text-gray-400">Web Search:</label>
+                                    <label className="text-sm font-medium text-gray-400">{t.webSearchLabel}</label>
                                      <div className="flex items-center gap-1 p-1 rounded-lg bg-black/40 border border-white/10 backdrop-blur-sm">
                                         <SearchProviderButton provider="off" label="Off" current={searchProvider} onClick={setSearchProvider} />
                                         <SearchProviderButton provider="google" label="Google" current={searchProvider} onClick={setSearchProvider} />
@@ -740,14 +807,26 @@ const App: React.FC = () => {
                             </div>
                             <div className="flex flex-col items-center">
                                 <div className="flex items-center gap-2 h-9">
-                                    <label className="text-sm font-medium text-gray-400">Large Font:</label>
+                                    <label className="text-sm font-medium text-gray-400">{t.largeFontLabel}</label>
                                     <button
                                         onClick={() => setIsLargeFont(!isLargeFont)}
                                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 ease-in-out ${isLargeFont ? 'bg-red-600' : 'bg-gray-700/80'}`}
                                     >
-                                        <span
-                                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 ease-in-out ${isLargeFont ? 'translate-x-6' : 'translate-x-1'}`}
-                                        />
+                                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 ease-in-out ${isLargeFont ? 'translate-x-6' : 'translate-x-1'}`}/>
+                                    </button>
+                                </div>
+                                <p className="mt-1 h-8"></p>
+                            </div>
+                             <div className="flex flex-col items-center">
+                                <div className="flex items-center gap-2 h-9">
+                                    <label className="text-sm font-medium text-gray-400">{t.languageLabel}</label>
+                                    <button
+                                        onClick={() => setLanguage(lang => lang === 'en' ? 'kn' : 'en')}
+                                        className="relative inline-flex h-6 w-32 items-center rounded-full bg-gray-700/80"
+                                    >
+                                        <span className={`absolute inset-0 w-1/2 h-full rounded-full bg-red-600 transform transition-transform duration-300 ease-in-out ${language === 'kn' ? 'translate-x-full' : 'translate-x-0'}`}/>
+                                        <span className="relative w-1/2 text-center text-xs font-semibold text-white z-10">EN</span>
+                                        <span className="relative w-1/2 text-center text-xs font-semibold text-white z-10">ಕನ</span>
                                     </button>
                                 </div>
                                 <p className="mt-1 h-8"></p>
@@ -755,13 +834,13 @@ const App: React.FC = () => {
                         </div>
 
                         <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="flex items-center gap-2 bg-black/40 border border-white/10 rounded-xl p-2 shadow-lg backdrop-blur-md">
-                            <input type="text" value={userInput} onChange={(e) => setUserInput(e.target.value)} placeholder="Ask me anything, or use the mic..." className="flex-1 bg-transparent focus:outline-none px-3 text-white placeholder-gray-500" disabled={isGenerating} />
+                            <input type="text" value={userInput} onChange={(e) => setUserInput(e.target.value)} placeholder={t.inputPlaceholder} className="flex-1 bg-transparent focus:outline-none px-3 text-white placeholder-gray-500" disabled={isGenerating || !canSendMessage} />
                             {speechRecognitionRef.current && (
-                                <button type="button" onClick={handleVoiceInput} disabled={isGenerating} className={`text-gray-400 hover:text-white transition-colors ${isListening ? 'text-red-500 animate-pulse' : ''}`} aria-label="Use voice input">
+                                <button type="button" onClick={handleVoiceInput} disabled={isGenerating || !canSendMessage} className={`text-gray-400 hover:text-white transition-colors ${isListening ? 'text-red-500 animate-pulse' : ''}`} aria-label="Use voice input">
                                     <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>
                                 </button>
                             )}
-                            <button type="submit" disabled={!userInput.trim() || isGenerating} className="bg-red-600 text-white rounded-lg w-10 h-10 flex items-center justify-center disabled:bg-gray-600/50 transition-colors" aria-label="Send">
+                            <button type="submit" disabled={!userInput.trim() || isGenerating || !canSendMessage} className="bg-red-600 text-white rounded-lg w-10 h-10 flex items-center justify-center disabled:bg-gray-600/50 transition-colors" aria-label="Send">
                                 <svg className="w-6 h-6 transform rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
                             </button>
                         </form>
@@ -776,6 +855,7 @@ const App: React.FC = () => {
             <TimetableModal isOpen={modalsOpen.timetable} onClose={() => handleModalToggle('timetable', false)} />
             <IntegrationsModal isOpen={modalsOpen.integrations} onClose={() => handleModalToggle('integrations', false)} />
             <PlacementDataModal isOpen={modalsOpen.placementData} onClose={() => handleModalToggle('placementData', false)} />
+            <StudyMaterialsModal isOpen={modalsOpen.studyMaterials} onClose={() => handleModalToggle('studyMaterials', false)} />
         </div>
     );
 };

@@ -1,3 +1,4 @@
+
 // Fix: Creating a functional Sidebar component for app navigation.
 import React from 'react';
 import { ChatSession } from '../types';
@@ -14,8 +15,10 @@ interface SidebarProps {
     onTimetableClick: () => void;
     onIntegrationsClick: () => void;
     onPlacementDataClick: () => void;
+    onStudyMaterialsClick: () => void;
     onDeleteChat: (chatId: string) => void;
     isHistoryLoading: boolean;
+    t: any; // Translation object
 }
 
 const SidebarButton: React.FC<{ icon: JSX.Element; text: string; onClick?: () => void;}> = ({ icon, text, onClick }) => (
@@ -25,16 +28,16 @@ const SidebarButton: React.FC<{ icon: JSX.Element; text: string; onClick?: () =>
     </button>
 );
 
-export const Sidebar: React.FC<SidebarProps> = ({ chatHistory, onSelectChat, onNewChat, activeChatId, onVirtualTourClick, onAttendanceClick, onCampusMapClick, onNearbyHangoutsClick, onTimetableClick, onIntegrationsClick, onPlacementDataClick, onDeleteChat, isHistoryLoading }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ chatHistory, onSelectChat, onNewChat, activeChatId, onVirtualTourClick, onAttendanceClick, onCampusMapClick, onNearbyHangoutsClick, onTimetableClick, onIntegrationsClick, onPlacementDataClick, onStudyMaterialsClick, onDeleteChat, isHistoryLoading, t }) => {
     return (
         <nav className="flex flex-col bg-black/30 backdrop-blur-md p-2 space-y-2 w-72 z-20 border-r border-white/10">
             <div className="mb-2">
-                <SidebarButton icon={<PlusIcon />} text="New Chat" onClick={onNewChat} />
+                <SidebarButton icon={<PlusIcon />} text={t.newChat} onClick={onNewChat} />
             </div>
             
             {/* Chat History */}
             <div className="flex-grow overflow-y-auto pr-1">
-              <h3 className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-2 mb-2">History</h3>
+              <h3 className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-2 mb-2">{t.history}</h3>
               <div className="space-y-1">
                 {isHistoryLoading ? (
                     Array.from({ length: 5 }).map((_, i) => (
@@ -63,19 +66,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatHistory, onSelectChat, onN
             </div>
 
             <div className="flex-shrink-0 border-t border-white/10 pt-2">
-                <SidebarButton icon={<PlacementIcon />} text="Placement Data" onClick={onPlacementDataClick} />
-                <SidebarButton icon={<TimetableIcon />} text="Timetable" onClick={onTimetableClick} />
-                <SidebarButton icon={<VideoIcon />} text="Virtual Tour" onClick={onVirtualTourClick} />
-                <SidebarButton icon={<CalculatorIcon />} text="Attendance Calc" onClick={onAttendanceClick} />
-                <SidebarButton icon={<MapIcon />} text="Campus Map" onClick={onCampusMapClick} />
-                <SidebarButton icon={<FoodIcon />} text="Nearby Hangouts" onClick={onNearbyHangoutsClick} />
-                <SidebarButton icon={<IntegrationIcon />} text="Integrations" onClick={onIntegrationsClick} />
+                <SidebarButton icon={<BookIcon />} text={t.studyMaterials} onClick={onStudyMaterialsClick} />
+                <SidebarButton icon={<PlacementIcon />} text={t.placementData} onClick={onPlacementDataClick} />
+                <SidebarButton icon={<TimetableIcon />} text={t.timetable} onClick={onTimetableClick} />
+                <SidebarButton icon={<VideoIcon />} text={t.virtualTour} onClick={onVirtualTourClick} />
+                <SidebarButton icon={<CalculatorIcon />} text={t.attendanceCalc} onClick={onAttendanceClick} />
+                <SidebarButton icon={<MapIcon />} text={t.campusMap} onClick={onCampusMapClick} />
+                <SidebarButton icon={<FoodIcon />} text={t.nearbyHangouts} onClick={onNearbyHangoutsClick} />
+                <SidebarButton icon={<IntegrationIcon />} text={t.integrations} onClick={onIntegrationsClick} />
             </div>
         </nav>
     );
 };
 
 // SVG Icons
+const BookIcon = () => (
+    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+);
 const PlacementIcon = () => (
     <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
 );

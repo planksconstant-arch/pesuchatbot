@@ -25,7 +25,7 @@ You must adhere to the following rules:
 4.  **Assume Expertise:** Assume the user has a technical background. Use appropriate terminology.`,
 };
 
-export const PERSONA_DESCRIPTIONS: Record<string, string> = {
+export const PERSONA_DESCRIPTIONS_EN: Record<string, string> = {
     pespresso: "Your helpful AI guide for all things PES University.",
     grok: "Witty, sarcastic, and direct. Expect a humorous or cynical edge.",
     claude: "Helpful, ethical, and safety-conscious. Prioritizes clear, factual explanations.",
@@ -33,6 +33,16 @@ export const PERSONA_DESCRIPTIONS: Record<string, string> = {
     qwen: "A powerful multilingual AI, adept at translation and cultural understanding.",
     deepseek: "A specialist in coding. Provides accurate code snippets and technical advice.",
 };
+
+export const PERSONA_DESCRIPTIONS_KN: Record<string, string> = {
+    pespresso: "ಪಿಇಎಸ್ ವಿಶ್ವವಿದ್ಯಾಲಯದ ಎಲ್ಲಾ ವಿಷಯಗಳಿಗೆ ನಿಮ್ಮ ಸಹಾಯಕ ಎಐ ಮಾರ್ಗದರ್ಶಿ.",
+    grok: "ಹಾಸ್ಯ, ವ್ಯಂಗ್ಯ ಮತ್ತು ನೇರ. ಹಾಸ್ಯಮಯ ಅಥವಾ циниካል ಅಂಚನ್ನು ನಿರೀಕ್ಷಿಸಿ.",
+    claude: "ಸಹಾಯಕ, ನೈತಿಕ ಮತ್ತು ಸುರಕ್ಷತೆ-ಪ್ರಜ್ಞೆಯುಳ್ಳ. ಸ್ಪಷ್ಟ, ವಾಸ್ತವಿಕ ವಿವರಣೆಗಳಿಗೆ ಆದ್ಯತೆ ನೀಡುತ್ತದೆ.",
+    chatgpt: "ವ್ಯಾಪಕ ಮತ್ತು ಮಾಹಿತಿಪೂರ್ಣ. ವಿವರವಾದ, ಸುಸಂಘಟಿತ ಉತ್ತರಗಳನ್ನು ಒದಗಿಸುತ್ತದೆ.",
+    qwen: "ಒಂದು ಶಕ್ತಿಯುತ ಬಹುಭಾಷಾ ಎಐ, ಅನುವಾದ ಮತ್ತು ಸಾಂಸ್ಕೃತಿಕ ತಿಳುವಳಿಕೆಯಲ್ಲಿ ನಿಪುಣ.",
+    deepseek: "ಕೋಡಿಂಗ್‌ನಲ್ಲಿ ತಜ್ಞ. ನಿಖರವಾದ ಕೋಡ್ ತುಣುಕುಗಳು ಮತ್ತು ತಾಂತ್ರಿಕ ಸಲಹೆಯನ್ನು ಒದಗಿಸುತ್ತದೆ.",
+};
+
 
 export const PERPLEXITY_INSTRUCTION = `
 You are an AI research assistant. Your task is to provide a comprehensive, synthesized answer based on the provided web search results.
