@@ -8,7 +8,7 @@ import { Sidebar } from './components/Sidebar';
 import { VirtualTourModal } from './components/VirtualTourModal';
 import { getAiInstance, generateChatTitle, isGeminiAvailable } from './services/geminiService';
 import { ChatSession, Message } from './types';
-import { PERSONA_INSTRUCTIONS, PERPLEXITY_INSTRUCTION, MEME_TRIGGERS, N8N_WORKFLOW_INSTRUCTION, N8N_SUMMARIZE_INSTRUCTION, N8N_ALUMNI_SEARCH_INSTRUCTION, N8N_QUESTION_PAPER_INSTRUCTION, PERSONA_DESCRIPTIONS_EN, PERSONA_DESCRIPTIONS_KN, N8N_BOOK_SEARCH_INSTRUCTION } from './constants';
+import { PERSONA_INSTRUCTIONS, PERPLEXITY_INSTRUCTION, MEME_TRIGGERS, N8N_WORKFLOW_INSTRUCTION, N8N_SUMMARIZE_INSTRUCTION, N8N_ALUMNI_SEARCH_INSTRUCTION, N8N_QUESTION_PAPER_INSTRUCTION, PERSONA_DESCRIPTIONS_EN, PERSONA_DESCRIPTIONS_KN, N8N_BOOK_SEARCH_INSTRUCTION, N8N_DISCORD_SUMMARIZE_INSTRUCTION } from './constants';
 import { PesLogo } from './components/PesLogo';
 import FluctuatingTitle from './components/FluctuatingTitle';
 import { MarkdownRenderer } from './components/MarkdownRenderer';
@@ -16,10 +16,11 @@ import { TypingIndicator } from './components/TypingIndicator';
 import { EmbeddedVideoPlayer } from './components/EmbeddedVideoPlayer';
 import { TimetableModal } from './components/TimetableModal';
 import { IntegrationsModal } from './components/IntegrationsModal';
-import { PlacementDataModal } from './components/PlacementDataModal';
+import { PlacementComparisonModal } from './components/PlacementComparisonModal';
 import { StudyMaterialsModal } from './components/StudyMaterialsModal';
 import { YapLapLogo } from './components/YapLapLogo';
 import { translations } from './translations';
+import { placementData } from './placementData';
 
 
 const StaticBackground = () => (
@@ -63,6 +64,8 @@ const App: React.FC = () => {
     const [isLargeFont, setIsLargeFont] = useState(false);
     const [language, setLanguage] = useState<Language>('en');
     const [canSendMessage, setCanSendMessage] = useState(true); // For rate limit cooldown
+    const [isTtsEnabled, setIsTtsEnabled] = useState(false);
+    const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
 
     const [modalsOpen, setModalsOpen] = useState({
         virtualTour: false,
@@ -77,6 +80,8 @@ const App: React.FC = () => {
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const speechRecognitionRef = useRef<any>(null);
+    const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
+
 
     const activeChat = chatHistory.find(c => c.id === activeChatId);
     const messages = activeChat ? activeChat.messages : [];
@@ -145,13 +150,26 @@ const App: React.FC = () => {
             
             const storedLanguage = localStorage.getItem('pes-yaplap-language');
             if (storedLanguage === 'kn') setLanguage('kn');
-
+            
+            const storedTts = localStorage.getItem('pes-yaplap-tts-enabled');
+            if (storedTts === 'true') setIsTtsEnabled(true);
 
         } catch (error) {
             console.error("Failed to load settings:", error);
             handleNewChat();
         } finally {
             setIsHistoryLoading(false);
+        }
+
+        // TTS setup
+        const loadVoices = () => {
+            voicesRef.current = window.speechSynthesis.getVoices();
+        };
+        if ('speechSynthesis' in window) {
+            loadVoices();
+            if (window.speechSynthesis.onvoiceschanged !== undefined) {
+                window.speechSynthesis.onvoiceschanged = loadVoices;
+            }
         }
     }, []);
 
@@ -170,7 +188,10 @@ const App: React.FC = () => {
     useEffect(() => {
         localStorage.setItem('pes-yaplap-language', language);
     }, [language]);
-
+    
+    useEffect(() => {
+        localStorage.setItem('pes-yaplap-tts-enabled', isTtsEnabled ? 'true' : 'false');
+    }, [isTtsEnabled]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -229,6 +250,47 @@ const App: React.FC = () => {
         }
     }, [language]); // Re-initialize if language changes
 
+    // Stop speaking when chat changes or component unmounts
+    useEffect(() => {
+        return () => {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
+        };
+    }, [activeChatId]);
+
+    const handleStopSpeaking = () => {
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            setSpeakingMessageId(null);
+        }
+    };
+
+    const handleSpeak = (text: string, messageId: string, lang: Language) => {
+        if (!('speechSynthesis' in window) || !text) return;
+
+        handleStopSpeaking(); // Stop any current speech
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        const languageCode = lang === 'kn' ? 'kn-IN' : 'en-US';
+        utterance.lang = languageCode;
+
+        // Find a suitable voice
+        const voice = voicesRef.current.find(v => v.lang === languageCode) || voicesRef.current.find(v => v.lang.startsWith(lang));
+        if (voice) {
+            utterance.voice = voice;
+        }
+
+        utterance.onend = () => setSpeakingMessageId(null);
+        utterance.onerror = (e) => {
+            console.error("Speech synthesis error", e);
+            setSpeakingMessageId(null);
+        };
+
+        setSpeakingMessageId(messageId);
+        window.speechSynthesis.speak(utterance);
+    };
+
     const handleVoiceInput = () => {
         if (isListening) {
             speechRecognitionRef.current?.stop();
@@ -255,6 +317,7 @@ const App: React.FC = () => {
         const ai = getAiInstance();
         if (!ai) return;
 
+        handleStopSpeaking();
         setIsGenerating(true);
         const userMessage: Message = { id: `user-${Date.now()}`, text: prompt, sender: 'user' };
         
@@ -304,6 +367,9 @@ const App: React.FC = () => {
 
             const botMessage: Message = { ...botTypingMessage, text: response.text, sources, isTyping: false };
             setChatHistory(prev => prev.map(chat => chat.id === currentChatId ? { ...chat, messages: [...chat.messages.slice(0, -1), botMessage] } : chat));
+            if (isTtsEnabled && botMessage.text) {
+                handleSpeak(botMessage.text, botMessage.id, language);
+            }
         } catch (error) {
             const errorText = getApiErrorMessage(error);
             const errorMessage: Message = { ...botTypingMessage, text: errorText, isTyping: false };
@@ -317,6 +383,7 @@ const App: React.FC = () => {
         const ai = getAiInstance();
         if (!ai) return;
 
+        handleStopSpeaking();
         setIsGenerating(true);
         const userMessage: Message = { id: `user-${Date.now()}`, text: fullPrompt, sender: 'user' };
 
@@ -361,6 +428,9 @@ const App: React.FC = () => {
             };
 
             setChatHistory(prev => prev.map(chat => chat.id === currentChatId ? { ...chat, messages: [...chat.messages.slice(0, -1), botImageMessage] } : chat));
+            if (isTtsEnabled && botImageMessage.text) {
+                handleSpeak(botImageMessage.text, botImageMessage.id, language);
+            }
         } catch (error) {
             const errorText = getApiErrorMessage(error);
             const errorMessage: Message = { ...botTypingMessage, text: errorText, isTyping: false };
@@ -375,6 +445,7 @@ const App: React.FC = () => {
         const ai = getAiInstance();
         if (!messageText || isGenerating || !ai || !canSendMessage) return;
         
+        handleStopSpeaking();
         const lowerCaseMessage = messageText.toLowerCase();
 
         // Check for persona switching command
@@ -429,6 +500,12 @@ const App: React.FC = () => {
             return handleN8nWorkflow(messageText, 'Reddit', (query) => N8N_SUMMARIZE_INSTRUCTION('Reddit', 'PES University Hostels'), modelProvider);
         }
         
+        const discordTriggers = ['on discord', 'from discord', 'search discord', 'summarize discord'];
+        if (discordTriggers.some(trigger => lowerCaseMessage.includes(trigger))) {
+            setUserInput('');
+            return handleN8nWorkflow(messageText, 'Discord', N8N_DISCORD_SUMMARIZE_INSTRUCTION, modelProvider);
+        }
+
         const alumniTriggers = ['alumni', 'find alumni', 'search alumni', 'pes alumni on linkedin'];
         if (alumniTriggers.some(trigger => lowerCaseMessage.includes(trigger))) {
             setUserInput('');
@@ -445,6 +522,25 @@ const App: React.FC = () => {
         if (bookTriggers.some(trigger => lowerCaseMessage.includes(trigger))) {
             setUserInput('');
             return handleN8nWorkflow(messageText, "Digital Libraries", N8N_BOOK_SEARCH_INSTRUCTION, modelProvider);
+        }
+
+        // N8n workflow for non-generic student doubts, seeks community opinions from Reddit
+        const studentDoubtTriggers = ['review on', 'opinion on', 'experience with', 'which is better', 'how is', 'recommendations for', 'seniors suggest', 'what do students think about'];
+        const pesKeywords = ['pesu', 'pes university', 'pes college'];
+        const excludedGenericTopics = ['admission', 'fee', 'syllabus', 'campus map', 'attendance', 'placements', 'virtual tour', 'directions'];
+
+        // Check for PES keywords and doubt triggers.
+        const isStudentDoubt = pesKeywords.some(kw => lowerCaseMessage.includes(kw)) &&
+                               studentDoubtTriggers.some(trigger => lowerCaseMessage.includes(trigger)) &&
+                               messageText.split(' ').length > 4; // Avoid triggering on very short questions.
+        
+        // Ensure it's not a generic topic that the main persona should handle.
+        const isNotGeneric = !excludedGenericTopics.some(topic => lowerCaseMessage.includes(topic));
+
+        if (isStudentDoubt && isNotGeneric) {
+            setUserInput('');
+            // Use the full user prompt as the topic for a broad search on Reddit.
+            return handleN8nWorkflow(messageText, 'Reddit', (query) => N8N_SUMMARIZE_INSTRUCTION('Reddit', query), modelProvider);
         }
 
         // Image Generation Check
@@ -500,6 +596,9 @@ const App: React.FC = () => {
                     ));
                 }
                 setUserInput('');
+                if (isTtsEnabled && botMemeMessage.text) {
+                    handleSpeak(botMemeMessage.text, botMemeMessage.id, language);
+                }
                 return; // Stop execution
             }
         }
@@ -563,6 +662,9 @@ const App: React.FC = () => {
                     }));
                 const botMessage: Message = { ...botTypingMessage, text: response.text, sources, isTyping: false };
                 setChatHistory(prev => prev.map(chat => chat.id === currentChatId ? { ...chat, messages: [...chat.messages.slice(0, -1), botMessage] } : chat));
+                if (isTtsEnabled && botMessage.text) {
+                    handleSpeak(botMessage.text, botMessage.id, language);
+                }
             } else {
                 const stream = await ai.models.generateContentStream({
                     model: 'gemini-2.5-flash',
@@ -581,6 +683,9 @@ const App: React.FC = () => {
                         }
                         return chat;
                     }));
+                }
+                if (isTtsEnabled && responseText) {
+                    handleSpeak(responseText, botTypingMessage.id, language);
                 }
             }
         } catch (error: any) {
@@ -601,6 +706,7 @@ const App: React.FC = () => {
     };
 
     const handleNewChat = () => {
+        handleStopSpeaking();
         const newChatId = `chat-new-${Date.now()}`;
         const newChatSession: ChatSession = { id: newChatId, title: 'New Chat', messages: [] };
         setChatHistory(prev => [newChatSession, ...prev]);
@@ -608,6 +714,7 @@ const App: React.FC = () => {
     };
 
     const handleDeleteChat = (chatId: string) => {
+        handleStopSpeaking();
         const updatedHistory = chatHistory.filter(c => c.id !== chatId);
         setChatHistory(updatedHistory);
         if (activeChatId === chatId) {
@@ -637,10 +744,16 @@ const App: React.FC = () => {
       </button>
     );
 
-    const handleSelectChat = (chatId: string) => setActiveChatId(chatId);
+    const handleSelectChat = (chatId: string) => {
+        handleStopSpeaking();
+        setActiveChatId(chatId);
+    };
     const handleModalToggle = (modalName: keyof typeof modalsOpen, state: boolean) => setModalsOpen(prev => ({ ...prev, [modalName]: state }));
 
     if (!isGeminiAvailable()) return <ApiKeyPrompt />;
+
+    const SpeakerIcon = () => <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>;
+    const StopIcon = () => <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10h6v4H9z" /></svg>;
 
     return (
         <div className="flex h-screen w-screen bg-black text-gray-200 font-sans overflow-hidden">
@@ -696,17 +809,26 @@ const App: React.FC = () => {
                                     </div>
                                 )}
                                  {msg.sender === 'bot' && !msg.isTyping && msg.text && (
-                                    <button 
-                                        onClick={() => handleCopyText(msg.text, msg.id)} 
-                                        className="absolute -top-2 -right-2 p-1.5 bg-gray-700/80 backdrop-blur-sm rounded-full text-gray-300 hover:bg-gray-600 hover:text-white opacity-0 group-hover:opacity-100 transition-all duration-200"
-                                        aria-label="Copy message"
-                                    >
-                                        {copiedMessageId === msg.id ? (
-                                            <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
-                                        ) : (
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                                        )}
-                                    </button>
+                                    <div className="absolute -top-2 -right-2 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                                        <button 
+                                            onClick={() => speakingMessageId === msg.id ? handleStopSpeaking() : handleSpeak(msg.text, msg.id, language)} 
+                                            className="p-1.5 bg-gray-700/80 backdrop-blur-sm rounded-full text-gray-300 hover:bg-gray-600 hover:text-white"
+                                            aria-label={speakingMessageId === msg.id ? "Stop speaking" : "Read message aloud"}
+                                        >
+                                            {speakingMessageId === msg.id ? <StopIcon /> : <SpeakerIcon />}
+                                        </button>
+                                        <button 
+                                            onClick={() => handleCopyText(msg.text, msg.id)} 
+                                            className="p-1.5 bg-gray-700/80 backdrop-blur-sm rounded-full text-gray-300 hover:bg-gray-600 hover:text-white"
+                                            aria-label="Copy message"
+                                        >
+                                            {copiedMessageId === msg.id ? (
+                                                <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+                                            ) : (
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                                            )}
+                                        </button>
+                                    </div>
                                 )}
                             </div>
                         </div>
@@ -811,6 +933,7 @@ const App: React.FC = () => {
                                     <button
                                         onClick={() => setIsLargeFont(!isLargeFont)}
                                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 ease-in-out ${isLargeFont ? 'bg-red-600' : 'bg-gray-700/80'}`}
+                                        aria-label="Toggle large font"
                                     >
                                         <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 ease-in-out ${isLargeFont ? 'translate-x-6' : 'translate-x-1'}`}/>
                                     </button>
@@ -823,10 +946,24 @@ const App: React.FC = () => {
                                     <button
                                         onClick={() => setLanguage(lang => lang === 'en' ? 'kn' : 'en')}
                                         className="relative inline-flex h-6 w-32 items-center rounded-full bg-gray-700/80"
+                                        aria-label="Toggle language between English and Kannada"
                                     >
                                         <span className={`absolute inset-0 w-1/2 h-full rounded-full bg-red-600 transform transition-transform duration-300 ease-in-out ${language === 'kn' ? 'translate-x-full' : 'translate-x-0'}`}/>
                                         <span className="relative w-1/2 text-center text-xs font-semibold text-white z-10">EN</span>
                                         <span className="relative w-1/2 text-center text-xs font-semibold text-white z-10">ಕನ</span>
+                                    </button>
+                                </div>
+                                <p className="mt-1 h-8"></p>
+                            </div>
+                             <div className="flex flex-col items-center">
+                                <div className="flex items-center gap-2 h-9">
+                                    <label className="text-sm font-medium text-gray-400">{t.ttsLabel}</label>
+                                    <button
+                                        onClick={() => setIsTtsEnabled(!isTtsEnabled)}
+                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 ease-in-out ${isTtsEnabled ? 'bg-red-600' : 'bg-gray-700/80'}`}
+                                        aria-label="Toggle text to speech"
+                                    >
+                                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 ease-in-out ${isTtsEnabled ? 'translate-x-6' : 'translate-x-1'}`}/>
                                     </button>
                                 </div>
                                 <p className="mt-1 h-8"></p>
@@ -854,7 +991,7 @@ const App: React.FC = () => {
             <NearbyHangoutsModal isOpen={modalsOpen.nearbyHangouts} onClose={() => handleModalToggle('nearbyHangouts', false)} />
             <TimetableModal isOpen={modalsOpen.timetable} onClose={() => handleModalToggle('timetable', false)} />
             <IntegrationsModal isOpen={modalsOpen.integrations} onClose={() => handleModalToggle('integrations', false)} />
-            <PlacementDataModal isOpen={modalsOpen.placementData} onClose={() => handleModalToggle('placementData', false)} />
+            <PlacementComparisonModal isOpen={modalsOpen.placementData} onClose={() => handleModalToggle('placementData', false)} data={placementData} />
             <StudyMaterialsModal isOpen={modalsOpen.studyMaterials} onClose={() => handleModalToggle('studyMaterials', false)} />
         </div>
     );

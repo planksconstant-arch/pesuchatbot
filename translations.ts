@@ -7,6 +7,7 @@ export const translations = {
     webSearchLabel: 'Web Search:',
     largeFontLabel: 'Large Font:',
     languageLabel: 'Language:',
+    ttsLabel: 'Auto-Speak Answers:',
     inputPlaceholder: 'Ask me anything, or use the mic...',
     // Sidebar.tsx
     newChat: 'New Chat',
@@ -32,6 +33,7 @@ export const translations = {
     webSearchLabel: 'ವೆಬ್ ಹುಡುಕಾಟ:',
     largeFontLabel: 'ದೊಡ್ಡ ಫಾಂಟ್:',
     languageLabel: 'ಭಾಷೆ:',
+    ttsLabel: 'ಉತ್ತರಗಳನ್ನು ಸ್ವಯಂ-ಮಾತನಾಡಿ:',
     inputPlaceholder: 'ಏನಾದರೂ ಕೇಳಿ, ಅಥವಾ ಮೈಕ್ ಬಳಸಿ...',
     // Sidebar.tsx
     newChat: 'ಹೊಸ ಚಾಟ್',

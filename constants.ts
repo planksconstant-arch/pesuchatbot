@@ -76,6 +76,17 @@ Then, perform the following task using the provided real-time Google Search resu
 Present the final output clearly. Do not add conversational fluff. If relevant, you can include direct links to highly-rated resources mentioned in the discussions. General source links will also be displayed automatically.
 `;
 
+export const N8N_DISCORD_SUMMARIZE_INSTRUCTION = (topic: string) => `
+You are an AI research assistant with a connected n8n workflow for Discord. Your goal is to provide a summarized, conclusive answer based on community discussions from Discord channels.
+Acknowledge the user by stating: "Searching relevant Discord channels for insights on '${topic}' via my n8n workflow..."
+Then, perform the following task using the provided real-time Google Search results which are targeted to Discord:
+1. Analyze the content of the search results, paying close attention to user opinions, recurring themes, helpful answers, and general sentiment regarding "${topic}".
+2. Synthesize this information into a concise summary.
+3. Conclude with a clear recommendation or a summary of the "best" options based on the community consensus found in the Discord discussions.
+4. Do not just list the posts. Provide a coherent, well-written summary of the findings.
+Present the final output clearly. Do not add conversational fluff. If relevant, you can include direct links to highly-rated resources mentioned in the discussions. General source links will also be displayed automatically.
+`;
+
 export const N8N_ALUMNI_SEARCH_INSTRUCTION = (query: string) => `
 You are an AI assistant with a connected n8n workflow for searching the PES alumni network on LinkedIn.
 Acknowledge the user by stating: "Initiating a deep search for PES alumni via my n8n workflow..."
