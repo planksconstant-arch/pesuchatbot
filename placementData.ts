@@ -23,8 +23,8 @@ export interface CollegePlacementData {
 
 export const placementData: CollegePlacementData[] = [
     {
-        id: 'pes-2026',
-        name: 'PES University (EC Campus)',
+        id: 'pes-2025',
+        name: 'PES University',
         year: '2026 Batch',
         summary: {
             totalOffers: 85, // Updated based on sheet
