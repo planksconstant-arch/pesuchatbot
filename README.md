@@ -84,7 +84,7 @@ Same API, different functions, zero friction.
 
 
 
-👉 In short: One API call. Multiple LLM powers. Always the best response for the context.<img width="2133" height="1416" alt="Screenshot 2025-09-14 094226" src="https://github.com/user-attachments/assets/dfbd994f-d3a8-46fe-b0bf-e4df627b7e76" /> 
+👉 In short: One API call. Multiple LLM powers. Always the best response for the context.<img width="2087" height="771" alt="Screenshot 2025-09-14 161422" src="https://github.com/user-attachments/assets/4ceb77b2-2656-48d3-96af-1b22ac9c8591" />
 
 🗣️ TTS & Multilingual Support
 
