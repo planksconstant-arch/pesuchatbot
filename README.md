@@ -45,6 +45,7 @@ Same API, different functions, zero friction.
 🗣️ TTS & Multilingual Support
 
 Our system includes Text-to-Speech (TTS) with auto-speak answers, making responses instantly audible. It supports seamless switching between English and Kannada, enabling inclusive access for diverse users. Whether learning, mentoring, or casual chat, users can hear responses naturally in their preferred language without extra setup.<img width="1331" height="623" alt="Screenshot 2025-09-14 094457" src="https://github.com/user-attachments/assets/6835ff64-4e63-4d3b-99ec-a15553786e31" />
+for student related doubts we have automated the process by n8n for reddit and discord for most accurate answers ,here have have trained the llm to summmarize the best responses from both websites to make the best of the answers <img width="1543" height="786" alt="Screenshot 2025-09-12 234723" src="https://github.com/user-attachments/assets/6082f2ab-cc06-49bc-ac9c-78f3c85d9332" />
 
 
 " />
