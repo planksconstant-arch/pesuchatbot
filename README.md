@@ -9,7 +9,7 @@
 
 
 Our system is powered by a single API gateway that connects to multiple Large Language Models (LLMs). Unlike traditional setups that rely on just one provider or use fallback when a model fails, our approach strategically switches between LLMs based on the task at hand.
-
+  
 
 
 ⚡ How It Works
@@ -187,3 +187,4 @@ Distributed under the MIT License. See LICENSE.txt for more information.
 3. Run the app:
 
    `npm run dev`
+done by venkat namish,pratush
